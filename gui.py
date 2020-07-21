@@ -7,7 +7,7 @@ from nvidia_tacotron_TTS_Layout import Ui_MainWindow
 from switch import Switch
 from timerthread import timerThread
 #import traceback
-import textwrap
+from preprocess import preprocess_text
 
 import time
 import requests
@@ -26,13 +26,14 @@ import torch
 from hparams import create_hparams
 from model import Tacotron2
 from train import load_model
-from text import text_to_sequence
+from text import text_to_sequence, cleaners
 #from denoiser import Denoiser
 
 #from secrets import TOKEN
 
 _mutex1 = QMutex()
 _running = False
+MAXIMUM_ALLOWED_LENGTH = 180
 
 #https://www.learnpyqt.com/courses/concurrent-execution/multithreading-pyqt-applications-qthreadpool/
 class WorkerSignals(QObject):
@@ -126,7 +127,7 @@ class GUI(QMainWindow, Ui_MainWindow):
         self.GpuSwitch = Switch(thumb_radius=8, track_radius=10, show_text = False)
         self.horizontalLayout.addWidget(self.GpuSwitch)
         self.GpuSwitch.setEnabled(torch.cuda.is_available())
-        self.use_cuda = False
+        self.use_cuda = torch.cuda.is_available()
         self.GpuSwitch.toggled.connect(self.set_cuda)
         self.GpuSwitch.setToolTip("<h4>CUDA installed: {}</h4>".format(torch.cuda.is_available()))
 
@@ -187,6 +188,11 @@ class GUI(QMainWindow, Ui_MainWindow):
         self.signals = GUISignals()  
         self.signals.progress.connect(self.update_log_bar)
         self.signals.elapsed.connect(self.on_elapsed)
+
+        self.se_opts = {'approve only': 1,
+                        'block large numbers': 0,
+                        'read dono amount': 1,
+                        }
 
         # Callback functions
         self.fns = {'GUI: start of polling loop': self.fns_gui_startpolling, 
@@ -299,8 +305,8 @@ class GUI(QMainWindow, Ui_MainWindow):
         _mutex1.lock()
         _running = True
         _mutex1.unlock()
-        worker = Worker(self.execute_this_fn, TOKEN, min_donation, self.channel,
-                    self.use_cuda, self.model, self.waveglow, 
+        worker = Worker(self.execute_this_fn, TOKEN, min_donation, self.channel, 
+                    self.se_opts, self.use_cuda, self.model, self.waveglow, 
                     self.offset, self.prev_time, self.startup_time) 
                     # Any other args, kwargs are passed to the run function
         worker.signals.result.connect(self.on_result)
@@ -323,7 +329,7 @@ class GUI(QMainWindow, Ui_MainWindow):
     # def progress_fn(self, n):
     #     print("%d%% done" % n)
     
-    def execute_this_fn(self, TOKEN, min_donation, channel, 
+    def execute_this_fn(self, TOKEN, min_donation, channel, se_opts,
                     use_cuda, model, waveglow,
                     offset, prev_time, startup_time,
                     progress_callback, elapsed_callback, text_ready, fn_callback):
@@ -349,6 +355,7 @@ class GUI(QMainWindow, Ui_MainWindow):
                 #print('Polling', datetime.datetime.utcnow().isoformat())
                 text_ready.emit("Sta2:Waiting for incoming donations . . .")
                 current_time = datetime.datetime.utcnow().isoformat()
+                # TODO: possible bug: missed donations once time pasts midnight
                 querystring = {"offset":offset,
                                 "limit":"1",
                                 "sort":"createdAt",
@@ -364,7 +371,7 @@ class GUI(QMainWindow, Ui_MainWindow):
                     offset += 1
                     if dono_time > prev_time: # Str comparison
                         amount = dono['donation']['amount'] # Int
-                        if float(amount) >= min_donation: # Float comparison
+                        if float(amount) >= min_donation and dono['approved']=='allowed': 
                             name = dono['donation']['user']['username']
                             msg = dono['donation']['message']
                             ## TODO Allow multiple speaker in msg
@@ -373,7 +380,12 @@ class GUI(QMainWindow, Ui_MainWindow):
                             text_ready.emit("Log2:\n###########################")
                             text_ready.emit("Log2:"+name+' donated '+currency+str(amount))
                             text_ready.emit("Log2:"+msg)
-                            lines = textwrap.wrap(msg, 180, break_long_words=False)
+                            lines = preprocess_text(msg)
+                            if se_opts['read dono amount'] == 1: # reads dono name and amount
+                                msg = '{} donated {} {}.'.format(name,
+                                                    str(amount), 
+                                                    cleaners.expand_currency(currency))
+                                lines.insert(0,msg) # Add to head to list
                             output = []
                             for count, line in enumerate(lines):
                                 fn_callback.emit(('GUI: progress bar 2 text', (count,len(lines))))
@@ -389,8 +401,8 @@ class GUI(QMainWindow, Ui_MainWindow):
                                                             sigma=0.666,
                                                             progress_callback = progress_callback,
                                                             elapsed_callback = None)
+                                    fn_callback.emit(('GUI: progress bar 2 text', (count+1,len(lines))))
                                     wav = audio[0].data.cpu().numpy()
-                                fn_callback.emit(('GUI: progress bar 2 text', (count+1,len(lines))))
                                 output.append(wav)
                             outwav = np.concatenate(output)
                             # Playback
@@ -668,7 +680,7 @@ class inferThread(QThread):
 
     def run(self):
         self.timerThread.start(time.time())
-        lines = textwrap.wrap(self.text, 180, break_long_words=False)
+        lines = preprocess_text(self.text)
         output  = []
         for count,line in enumerate(lines):
             self.iterSignal.emit((count,len(lines)))
@@ -683,8 +695,8 @@ class inferThread(QThread):
                                         sigma=0.666,
                                         progress_callback = self.progress,
                                         elapsed_callback = self.elapsed)
+                self.iterSignal.emit((count+1,len(lines)))
                 wav = audio[0].data.cpu().numpy()
-            self.iterSignal.emit((count+1,len(lines)))
             output.append(wav)
         outwav = np.concatenate(output)
         self.audioSignal.emit(outwav)

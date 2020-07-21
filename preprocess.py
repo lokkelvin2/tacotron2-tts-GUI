@@ -1,7 +1,8 @@
 import re
 import num2words
+import textwrap
 
-_MAXIMUM_ALLOWED_LENGTH = 160
+_MAXIMUM_ALLOWED_LENGTH = 140
 
 def preprocess_text(text):
     '''
