@@ -21,7 +21,7 @@ from .numbers import normalize_numbers
 _whitespace_re = re.compile(r'\s+')
 
 # List of (regular expression, replacement) pairs for abbreviations:
-_abbreviations = [(re.compile('\\b%s\\.' % x[0], re.IGNORECASE), x[1]) for x in [
+_abbreviations = [(re.compile('\\b%s\\.?' % x[0], re.IGNORECASE), x[1]) for x in [
   ('mrs', 'misess'),
   ('mr', 'mister'),
   ('dr', 'doctor'),
@@ -42,6 +42,37 @@ _abbreviations = [(re.compile('\\b%s\\.' % x[0], re.IGNORECASE), x[1]) for x in 
   ('ft', 'fort'),
 ]]
 
+_currency = [(re.compile('\\b%s' % x[0], re.IGNORECASE), x[1]) for x in [
+    ('aud', 'australia dollar'),
+    ('brl', 'brazil real'),
+    ('cad', 'canada Dollar'),
+    ('czk', 'czech koruna'),
+    ('dkk', 'denmark krone'),
+    ('eur', 'euro'),
+    ('hkd', 'hong kong dollar'),
+    ('huf', 'hungary forint'),
+    ('ils', 'israel new shekel'),
+    ('jpy', 'japan yen'),
+    ('myr', 'malaysia ringgit'),
+    ('mxn', 'mexico peso'),
+    ('nok', 'norway kroner'),
+    ('nzd', 'new zealand dollar'),
+    ('php', 'philippine peso'),
+    ('gbp', 'great britain pound'),
+    ('rub', 'russia rouble'),
+    ('sgd', 'singapore dollar'),
+    ('sek', 'sweden krona'),
+    ('chf', 'switzerland franc'),
+    ('twd', 'taiwan dollar'),
+    ('thb', 'thailand baht'),
+    ('try', 'turkish new lira'),
+    ('usd', 'us dollar'),
+]]
+
+def expand_currency(text):
+    for regex, replacement in _currency:
+        text = re.sub(regex, replacement, text)
+    return text
 
 def expand_abbreviations(text):
   for regex, replacement in _abbreviations:
