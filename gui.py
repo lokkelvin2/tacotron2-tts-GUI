@@ -128,7 +128,7 @@ class GUI(QMainWindow, Ui_MainWindow):
         self.GpuSwitch.setEnabled(torch.cuda.is_available())
         self.use_cuda = False
         self.GpuSwitch.toggled.connect(self.set_cuda)
-        self.GpuSwitch.setToolTip("<h4>CUDA installed: {}</h4>".format(torch.cuda.is_available()))        # < +++++
+        self.GpuSwitch.setToolTip("<h4>CUDA installed: {}</h4>".format(torch.cuda.is_available()))
 
         self.progressBar2Label.setText('')
         self.progressBarLabel.setText('')
@@ -357,6 +357,8 @@ class GUI(QMainWindow, Ui_MainWindow):
                 response = requests.request("GET", url, headers=headers, params=querystring)
                 data = json.loads(response.text)
                 for dono in data['docs']:
+                    # TODO: check 'status', 'approved'
+                    #data['docs'][0]['approved']=='allowed'
                     text_ready.emit("Sta2:Processing donations")
                     dono_time = dono['createdAt']
                     offset += 1
