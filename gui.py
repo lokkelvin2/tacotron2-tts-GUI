@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import QWidget,QMainWindow,QHeaderView, QMessageBox, QFileD
 from nvidia_tacotron_TTS_Layout import Ui_MainWindow
 from switch import Switch
 from timerthread import timerThread
-import traceback
+#import traceback
 import textwrap
 
 import time
@@ -17,10 +17,6 @@ import numpy as np
 import os
 import pygame
 
-import matplotlib
-import matplotlib.pyplot as plt
-import IPython.display as ipd
-
 import sys
 sys.path.append(os.path.join(sys.path[0],'waveglow/'))
 
@@ -29,11 +25,9 @@ import torch
 
 from hparams import create_hparams
 from model import Tacotron2
-from layers import TacotronSTFT, STFT
-from audio_processing import griffin_lim
 from train import load_model
 from text import text_to_sequence
-from denoiser import Denoiser
+#from denoiser import Denoiser
 
 #from secrets import TOKEN
 
@@ -108,9 +102,10 @@ class Worker(QRunnable):
         try:
             result = self.fn(*self.args, **self.kwargs)
         except:
-            traceback.print_exc()
-            exctype, value = sys.exc_info()[:2]
-            self.signals.error.emit((exctype, value, traceback.format_exc()))
+            pass
+            # traceback.print_exc()
+            # exctype, value = sys.exc_info()[:2]
+            # self.signals.error.emit((exctype, value, traceback.format_exc()))
         else:
             self.signals.result.emit(result)  # Return the result of the processing
         finally:
@@ -130,9 +125,10 @@ class GUI(QMainWindow, Ui_MainWindow):
         
         self.GpuSwitch = Switch(thumb_radius=8, track_radius=10, show_text = False)
         self.horizontalLayout.addWidget(self.GpuSwitch)
-        self.GpuSwitch.setEnabled = torch.cuda.is_available()
+        self.GpuSwitch.setEnabled(torch.cuda.is_available())
         self.use_cuda = False
         self.GpuSwitch.toggled.connect(self.set_cuda)
+        self.GpuSwitch.setToolTip("<h4>CUDA installed: {}</h4>".format(torch.cuda.is_available()))        # < +++++
 
         self.progressBar2Label.setText('')
         self.progressBarLabel.setText('')
@@ -507,7 +503,8 @@ class GUI(QMainWindow, Ui_MainWindow):
         self.hparams.sampling_rate = 22050
         # Load Tacotron 2 from checkpoint
         self.model = load_model(self.hparams,self.use_cuda)
-        self.model.load_state_dict(torch.load(TTmodel_fpath)['state_dict'])
+        device = torch.device('cuda' if self.use_cuda else 'cpu')
+        self.model.load_state_dict(torch.load(TTmodel_fpath, map_location = device)['state_dict'])
         if self.use_cuda:
             _ = self.model.cuda().eval().half()
         else:
