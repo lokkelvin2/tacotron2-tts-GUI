@@ -126,7 +126,7 @@ class GUI(QMainWindow, Ui_MainWindow):
 
         self.app = app
         self.setupUi(self)
-        self.setWindowTitle("Tacotron2 + Waveglow GUI v%s" %0.1)
+        self.setWindowTitle("Tacotron2 + Waveglow GUI v%s" %0.2)
         
         self.GpuSwitch = Switch(thumb_radius=8, track_radius=10, show_text = False)
         self.horizontalLayout.addWidget(self.GpuSwitch)

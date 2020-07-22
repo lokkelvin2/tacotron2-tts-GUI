@@ -229,4 +229,4 @@ class Ui_MainWindow(object):
         self.progressBar2Label.setText(_translate("MainWindow", "TextLabel"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_2), _translate("MainWindow", "StreamElements"))
         self.statusbar.setText(_translate("MainWindow", "Ready"))
-        self.label_6.setText(_translate("MainWindow", "v0.1"))
+        self.label_6.setText(_translate("MainWindow", "v0.2"))
