@@ -159,10 +159,10 @@ class GUI(QMainWindow, Ui_MainWindow):
         
         # Because of bug in streamelements timestamp filter, need 2 variables for previous time
         
-        #self.startup_time = datetime.datetime.utcnow().isoformat()
-        self.startup_time = '0' # For debugging
-        #self.prev_time = datetime.datetime.utcnow().isoformat() 
-        self.prev_time = '0' # for debugging
+        self.startup_time = datetime.datetime.utcnow().isoformat()
+        #self.startup_time = '0' # For debugging
+        self.prev_time = datetime.datetime.utcnow().isoformat() 
+        #self.prev_time = '0' # for debugging
         self.offset = 0
         
         # self.ClientStartBtn.clicked.connect(self.start_client)
