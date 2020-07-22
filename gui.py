@@ -10,6 +10,7 @@ from timerthread import timerThread
 from preprocess import preprocess_text
 
 import time
+from urllib.parse import urlparse
 import requests
 import json
 import datetime
@@ -181,8 +182,7 @@ class GUI(QMainWindow, Ui_MainWindow):
         self.log_window2.ensureCursorVisible()
         self.update_log_window("Begin by loading a model")
         pygame.mixer.quit()
-        #pygame.mixer.init(frequency=22050,size=-16, channels=1)
-        pygame.mixer.init(frequency=30000,size=-16, channels=1)
+        pygame.mixer.init(frequency=22050,size=-16, channels=1)
         self.channel = pygame.mixer.Channel(0)
 
         self.ClientStartBtn.clicked.connect(self.start)
@@ -716,10 +716,12 @@ class GUI(QMainWindow, Ui_MainWindow):
                 self.set_client_flag(True)
                 return True
             else: 
-                self.update_log_window_2("\nDouble check your token")
+                self.update_log_window_2("\nError: Double check your token")
+                self.update_status_bar("Invalid StreamElements")
                 print(response2.text)
         else: 
-            self.update_log_window_2("\nDouble check your channel name")
+            self.update_log_window_2("\nError: Double check your channel name")
+            self.update_status_bar("Invalid StreamElements")
             print(response.text)
         
         return False
