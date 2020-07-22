@@ -21,7 +21,7 @@ from .numbers import normalize_numbers
 _whitespace_re = re.compile(r'\s+')
 
 # List of (regular expression, replacement) pairs for abbreviations:
-_abbreviations = [(re.compile('\\b%s\\.?' % x[0], re.IGNORECASE), x[1]) for x in [
+_abbreviations = [(re.compile('\\b%s(\\.|\\b)' % x[0], re.IGNORECASE), x[1]) for x in [
   ('mrs', 'misess'),
   ('mr', 'mister'),
   ('dr', 'doctor'),
@@ -40,9 +40,10 @@ _abbreviations = [(re.compile('\\b%s\\.?' % x[0], re.IGNORECASE), x[1]) for x in
   ('ltd', 'limited'),
   ('col', 'colonel'),
   ('ft', 'fort'),
+  ('bn', 'billion'),
 ]]
 
-_currency = [(re.compile('\\b%s(\\.|\\b)' % x[0], re.IGNORECASE), x[1]) for x in [
+_currency = [(re.compile('\\b%s' % x[0], re.IGNORECASE), x[1]) for x in [
     ('aud', 'australia dollar'),
     ('brl', 'brazil real'),
     ('cad', 'canada Dollar'),
