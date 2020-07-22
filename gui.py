@@ -32,8 +32,11 @@ from text import text_to_sequence, cleaners
 #from secrets import TOKEN
 
 _mutex1 = QMutex()
-_running = False
-MAXIMUM_ALLOWED_LENGTH = 180
+_running1 = False # tab 0 synthesis QThread : Start/stop
+_mutex2 = QMutex() 
+_running2 = False # tab 1 eventloop QRunnable: Start/stop
+_mutex3 = QMutex()
+_running3 = False # tab 1 eventloop QRunnable: Skip current item
 
 #https://www.learnpyqt.com/courses/concurrent-execution/multithreading-pyqt-applications-qthreadpool/
 class WorkerSignals(QObject):
@@ -127,7 +130,7 @@ class GUI(QMainWindow, Ui_MainWindow):
         self.GpuSwitch = Switch(thumb_radius=8, track_radius=10, show_text = False)
         self.horizontalLayout.addWidget(self.GpuSwitch)
         self.GpuSwitch.setEnabled(torch.cuda.is_available())
-        self.use_cuda = torch.cuda.is_available()
+        self.use_cuda = False
         self.GpuSwitch.toggled.connect(self.set_cuda)
         self.GpuSwitch.setToolTip("<h4>CUDA installed: {}</h4>".format(torch.cuda.is_available()))
 
@@ -143,7 +146,7 @@ class GUI(QMainWindow, Ui_MainWindow):
         self.TTModelCombo.currentIndexChanged.connect(self.set_reload_model_flag)
         self.WGModelCombo.currentIndexChanged.connect(self.set_reload_model_flag)
         self.TTSDialogButton.clicked.connect(self.start_synthesis)
-        self.TTSSkipButton.clicked.connect(self.skip_wav)
+        self.TTSSkipButton.clicked.connect(self.skip_infer_playback)
         self.TTSSkipButton.setDisabled(True)
                 
         self.logs = []
@@ -156,10 +159,10 @@ class GUI(QMainWindow, Ui_MainWindow):
         
         # Because of bug in streamelements timestamp filter, need 2 variables for previous time
         
-        self.startup_time = datetime.datetime.utcnow().isoformat()
-        # self.startup_time = '0' # For debugging
-        self.prev_time = datetime.datetime.utcnow().isoformat() 
-        #self.prev_time = '0' # for debugging
+        #self.startup_time = datetime.datetime.utcnow().isoformat()
+        self.startup_time = '0' # For debugging
+        #self.prev_time = datetime.datetime.utcnow().isoformat() 
+        self.prev_time = '0' # for debugging
         self.offset = 0
         
         # self.ClientStartBtn.clicked.connect(self.start_client)
@@ -178,7 +181,8 @@ class GUI(QMainWindow, Ui_MainWindow):
         self.log_window2.ensureCursorVisible()
         self.update_log_window("Begin by loading a model")
         pygame.mixer.quit()
-        pygame.mixer.init(frequency=22050,size=-16, channels=1)
+        #pygame.mixer.init(frequency=22050,size=-16, channels=1)
+        pygame.mixer.init(frequency=30000,size=-16, channels=1)
         self.channel = pygame.mixer.Channel(0)
 
         self.ClientStartBtn.clicked.connect(self.start)
@@ -203,7 +207,6 @@ class GUI(QMainWindow, Ui_MainWindow):
                     'GUI: progress bar 2 text' : self.fns_gui_pbtext}
 
     def fns_gui_startpolling(self,arg=None):
-        'GUI: start of polling loop'
         self.ClientStartBtn.setDisabled(True)
         self.ClientStopBtn.setEnabled(True)
         self.ClientSkipBtn.setEnabled(True)
@@ -211,6 +214,8 @@ class GUI(QMainWindow, Ui_MainWindow):
         self.ClientAmountLine.setDisabled(True)
 
     def fns_gui_endpolling(self,arg=None):
+        self.update_log_bar2(0)
+        self.progressBar2Label.setText('')
         self.ClientStartBtn.setEnabled(True)
         self.ClientStopBtn.setDisabled(True)
         self.ClientSkipBtn.setDisabled(True)
@@ -269,12 +274,12 @@ class GUI(QMainWindow, Ui_MainWindow):
     @pyqtSlot(int)
     def update_log_bar(self,val):
         self.progressBar.setValue(val)
-        self.progressBar.setTextVisible(val != 0)
+        #self.progressBar.setTextVisible(val != 0)
 
     @pyqtSlot(int)
     def update_log_bar2(self,val):
         self.progressBar2.setValue(val)
-        self.progressBar2.setTextVisible(val != 0)
+        #self.progressBar2.setTextVisible(val != 0)
 
     @pyqtSlot(int)
     def on_elapsed(self,val):
@@ -294,7 +299,7 @@ class GUI(QMainWindow, Ui_MainWindow):
 
     def start(self):
         # Pass the function to execute
-        global _running
+        global _running2,_running3
         if not self.validate_se():
             return
         if self.reload_model_flag: 
@@ -302,9 +307,12 @@ class GUI(QMainWindow, Ui_MainWindow):
             self.reload_model_flag = False
         min_donation = self.get_min_donation()
         TOKEN = self.get_token()
-        _mutex1.lock()
-        _running = True
-        _mutex1.unlock()
+        _mutex2.lock()
+        _running2 = True
+        _mutex2.unlock()
+        _mutex3.lock()
+        _running3 = True
+        _mutex3.unlock()
         worker = Worker(self.execute_this_fn, TOKEN, min_donation, self.channel, 
                     self.se_opts, self.use_cuda, self.model, self.waveglow, 
                     self.offset, self.prev_time, self.startup_time) 
@@ -320,24 +328,36 @@ class GUI(QMainWindow, Ui_MainWindow):
         self.threadpool.start(worker) 
         
     def stop(self):
-        global _running
-        _mutex1.lock()
-        _running = False
-        _mutex1.unlock()
+        global _running2, _running3
+        _mutex2.lock()
+        _running2 = False
+        _mutex2.unlock()
+        _mutex3.lock()
+        _running3 = False
+        _mutex3.unlock()
+        self.skip_wav()
+
+    def skip(self):
+        global _running3
+        _mutex3.lock()
+        _running3 = False
+        _mutex3.unlock()
         self.skip_wav()
 
     # def progress_fn(self, n):
     #     print("%d%% done" % n)
+
+    def get_interruptflag2(self):            
+        _mutex3.lock()
+        val = _running3
+        _mutex3.unlock()
+        return val
     
     def execute_this_fn(self, TOKEN, min_donation, channel, se_opts,
                     use_cuda, model, waveglow,
                     offset, prev_time, startup_time,
                     progress_callback, elapsed_callback, text_ready, fn_callback):
-        # Function executes in client thread. 
-        # Synthesis does not block gui thread.
-        # Can run methods of GUI class but cannot run GUI updates directly
-        # from this thread. Use signal and slots to communicate with main GUI.
-        # We pass pygame.mixer.channel object into this thread to check for channel activity.
+        # TODO: refactor this messy block
         fn_callback.emit(('GUI: start of polling loop',None))
         text_ready.emit("Sta2:Connecting to StreamElements")
         url = "https://api.streamelements.com/kappa/v2/tips/"+self.channel_id
@@ -345,12 +365,12 @@ class GUI(QMainWindow, Ui_MainWindow):
         text_ready.emit('Log2:Initializing')
         text_ready.emit('Log2:Minimum amount for TTS: '+str(min_donation))
         while True:
-            _mutex1.lock()
-            if _running == False:
-                _mutex1.unlock()
+            _mutex2.lock()
+            if _running2 == False:
+                _mutex2.unlock()
                 break
             else:
-                _mutex1.unlock()
+                _mutex2.unlock()
             if not channel.get_busy():
                 #print('Polling', datetime.datetime.utcnow().isoformat())
                 text_ready.emit("Sta2:Waiting for incoming donations . . .")
@@ -364,8 +384,6 @@ class GUI(QMainWindow, Ui_MainWindow):
                 response = requests.request("GET", url, headers=headers, params=querystring)
                 data = json.loads(response.text)
                 for dono in data['docs']:
-                    # TODO: check 'status', 'approved'
-                    #data['docs'][0]['approved']=='allowed'
                     text_ready.emit("Sta2:Processing donations")
                     dono_time = dono['createdAt']
                     offset += 1
@@ -400,13 +418,22 @@ class GUI(QMainWindow, Ui_MainWindow):
                                     audio = waveglow.infer(mel_outputs_postnet, 
                                                             sigma=0.666,
                                                             progress_callback = progress_callback,
-                                                            elapsed_callback = None)
+                                                            elapsed_callback = None,
+                                                            get_interruptflag = self.get_interruptflag2)
+                                    if type(audio) != torch.Tensor:
+                                        # Catches when waveglow is interrupted and returns none
+                                        break
                                     fn_callback.emit(('GUI: progress bar 2 text', (count+1,len(lines))))
                                     wav = audio[0].data.cpu().numpy()
                                 output.append(wav)
-                            outwav = np.concatenate(output)
-                            # Playback
-                            fn_callback.emit(('Wav: playback',outwav))
+                            _mutex3.lock()
+                            if _running3 == True:
+                                _mutex3.unlock()
+                                print('running3 False:')
+                                outwav = np.concatenate(output)
+                                # Playback
+                                fn_callback.emit(('Wav: playback',outwav))
+                            else: _mutex3.unlock()
                             prev_time = dono_time # Increment time
             time.sleep(0.5)
         fn_callback.emit(('GUI: end of polling loop',None))
@@ -492,9 +519,11 @@ class GUI(QMainWindow, Ui_MainWindow):
         #self.app.processEvents()
 
     def playback_wav(self,wav):
-        if self.tabWidget.currentIndex()==0:
-            self.TTSSkipButton.setEnabled(True)
-        else:
+        #if self.tabWidget.currentIndex()==0:
+        #    self.TTSSkipButton.setEnabled(True)
+        #else:
+        #    self.ClientSkipBtn.setEnabled(True)
+        if self.tabWidget.currentIndex()==1:
             self.ClientSkipBtn.setEnabled(True)
         if wav.dtype != np.int16 :
             # Convert from float32 or float16 to signed int16 for pygame
@@ -506,8 +535,20 @@ class GUI(QMainWindow, Ui_MainWindow):
     def skip_wav(self):
         if self.channel.get_busy():
             self.channel.stop()
-        self.TTSSkipButton.setDisabled(True)
         self.ClientSkipBtn.setDisabled(True)
+    
+    def skip_infer_playback(self):
+        global _running1
+        if self.channel.get_busy():
+            self.channel.stop()
+        _mutex1.lock()      # We could also use a signal/slot mechanism 
+        if _running1:
+            self.progressBarLabel.setText('Interrupting...')
+            _running1 = False   # instead of mutex since inference is on QThread
+        _mutex1.unlock()
+        self.TTSSkipButton.setDisabled(True)
+        
+
 
     def reload_model(self):
         TTmodel_fpath = self.get_current_TTmodel_dir()
@@ -537,6 +578,7 @@ class GUI(QMainWindow, Ui_MainWindow):
     def start_synthesis(self):
         # Runs in main gui thread. Synthesize blocks gui.
         # Can update gui directly in this function.
+        global _running1
         self.t_1 = time.time()
         self.TTSDialogButton.setDisabled(True)
         self.TTModelCombo.setDisabled(True)
@@ -544,6 +586,7 @@ class GUI(QMainWindow, Ui_MainWindow):
         self.TTSTextEdit.setDisabled(True)
         self.LoadTTButton.setDisabled(True)
         self.LoadWGButton.setDisabled(True)
+        self.TTSSkipButton.setEnabled(True)
         self.tab_2.setDisabled(True)
         self.update_log_bar(0)
         self.update_log_window('Initializing','clear')
@@ -554,7 +597,9 @@ class GUI(QMainWindow, Ui_MainWindow):
             self.reload_model_flag = False
         # Prepare text input
         text = self.TTSTextEdit.toPlainText()
-        
+        _mutex1.lock()
+        _running1 = True
+        _mutex1.unlock()
         self.current_thread = inferThread(text,
                                         self.use_cuda,
                                         self.model,
@@ -563,12 +608,17 @@ class GUI(QMainWindow, Ui_MainWindow):
                                         None,
                                         self.t_1,
                                         parent = self)
-        self.current_thread.audioSignal.connect(self.on_inferThread_audio)
+        self.current_thread.audioSignal.connect(self.on_inferThread_complete)
         self.current_thread.timeElapsed.connect(self.on_elapsed)
         self.current_thread.iterSignal.connect(self.on_itersignal)
+        self.current_thread.interruptSignal.connect(self.on_interrupt)
 
     @pyqtSlot(np.ndarray)    
-    def on_inferThread_audio(self,wav):
+    def on_inferThread_complete(self,wav):
+        global _running1
+        _mutex1.lock()
+        _running1 = False
+        _mutex1.unlock()
         #audio_denoised = denoiser(audio, strength=0.01)[:, 0]
         #wav = audio_denoised.cpu().numpy()
         self.playback_wav(wav)
@@ -585,7 +635,6 @@ class GUI(QMainWindow, Ui_MainWindow):
         line = 'Generated {:.1f}s of audio in {:.1f}s ({:.2f} real-time factor)'.format(wav_length,elapsed,rtf)
         self.update_log_window(line,'overwrite')
         tps = elapsed / len(wav)
-        print(wav.shape)
         print(" > Run-time: {}".format(elapsed))
         print(" > Real-time factor: {}".format(rtf))
         print(" > Time per step: {}".format(tps))
@@ -597,6 +646,25 @@ class GUI(QMainWindow, Ui_MainWindow):
     def on_itersignal(self,tup):
         current,total = tup
         self.progressBarLabel.setText('{}/{}'.format(current,total))
+
+    @pyqtSlot()
+    def on_interrupt(self):
+        # Reenable buttons
+        self.TTSDialogButton.setEnabled(True)
+        self.TTModelCombo.setEnabled(True)
+        self.WGModelCombo.setEnabled(True)
+        self.TTSTextEdit.setEnabled(True)
+        self.LoadTTButton.setEnabled(True)
+        self.LoadWGButton.setEnabled(True)
+        self.tab_2.setEnabled(True)
+        # Refresh progress bar
+        self.update_log_bar(0)
+        self.progressBarLabel.setText('')
+        # Write to log window
+        self.update_log_window('Interrupted','overwrite')
+        # Write to status bar
+        self.update_status_bar("Ready")        
+        
 
     def update_log_window_2(self, line, mode="newline"):
         if mode == "newline" or not self.logs2:
@@ -663,6 +731,7 @@ class inferThread(QThread):
     timeElapsed = pyqtSignal(int)
     audioSignal = pyqtSignal(np.ndarray)
     iterSignal = pyqtSignal(tuple)
+    interruptSignal = pyqtSignal()
 
     def __init__(self, text, use_cuda, model, waveglow, 
                 progress, elapsed, timestart, parent=None):
@@ -683,6 +752,13 @@ class inferThread(QThread):
         lines = preprocess_text(self.text)
         output  = []
         for count,line in enumerate(lines):
+            _mutex1.lock()
+            if _running1 == False:
+                _mutex1.unlock()
+                self.interruptSignal.emit()
+                return
+            else:
+                _mutex1.unlock()
             self.iterSignal.emit((count,len(lines)))
             sequence = np.array(text_to_sequence(line, ['english_cleaners']))[None, :]
             device = torch.device('cuda' if self.use_cuda else 'cpu')
@@ -694,12 +770,25 @@ class inferThread(QThread):
                 audio = self.waveglow.infer(mel_outputs_postnet, 
                                         sigma=0.666,
                                         progress_callback = self.progress,
-                                        elapsed_callback = self.elapsed)
+                                        elapsed_callback = self.elapsed,
+                                        get_interruptflag = self.get_interruptflag)
+                if type(audio) != torch.Tensor:
+                    # Catches when waveglow is interrupted and returns none
+                    self.interruptSignal.emit()
+                    return
                 self.iterSignal.emit((count+1,len(lines)))
                 wav = audio[0].data.cpu().numpy()
             output.append(wav)
         outwav = np.concatenate(output)
         self.audioSignal.emit(outwav)
+
+            
+    
+    def get_interruptflag(self):
+        _mutex1.lock()
+        val = _running1
+        _mutex1.unlock()
+        return val
         
 
 if __name__ == '__main__':
