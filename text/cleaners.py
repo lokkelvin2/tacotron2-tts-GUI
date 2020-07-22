@@ -42,7 +42,7 @@ _abbreviations = [(re.compile('\\b%s\\.?' % x[0], re.IGNORECASE), x[1]) for x in
   ('ft', 'fort'),
 ]]
 
-_currency = [(re.compile('\\b%s' % x[0], re.IGNORECASE), x[1]) for x in [
+_currency = [(re.compile('\\b%s(\\.|\\b)' % x[0], re.IGNORECASE), x[1]) for x in [
     ('aud', 'australia dollar'),
     ('brl', 'brazil real'),
     ('cad', 'canada Dollar'),
@@ -94,6 +94,11 @@ def collapse_whitespace(text):
 
 def convert_to_ascii(text):
   return unidecode(text)
+
+def fullstop_short_phrases(text):
+  if len(text) < 10:
+    if text[-1]!='.':
+      return text + '.'
 
 
 def basic_cleaners(text):
