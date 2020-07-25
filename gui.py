@@ -578,7 +578,7 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
         else:
             _ = self.model.eval()
         #  Load WaveGlow for mel2audio synthesis and denoiser
-        self.waveglow = torch.load(WGmodel_fpath)['model']
+        self.waveglow = torch.load(WGmodel_fpath, map_location = device)['model']
         self.waveglow.use_cuda = self.use_cuda
         if self.use_cuda: 
             self.waveglow.cuda().eval().half()
