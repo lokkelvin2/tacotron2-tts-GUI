@@ -33,16 +33,11 @@ from text import text_to_sequence, cleaners
 #from secrets import TOKEN
 
 _mutex1 = QMutex()
-<<<<<<< HEAD
-_running = False
-MAXIMUM_ALLOWED_LENGTH = 180
-=======
 _running1 = False # tab 0 synthesis QThread : Start/stop
 _mutex2 = QMutex() 
 _running2 = False # tab 1 eventloop QRunnable: Start/stop
 _mutex3 = QMutex()
 _running3 = False # tab 1 eventloop QRunnable: Skip current item
->>>>>>> gui
 
 #https://www.learnpyqt.com/courses/concurrent-execution/multithreading-pyqt-applications-qthreadpool/
 class WorkerSignals(QObject):
@@ -133,15 +128,8 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
         self.setupUi(self)
         self.setWindowTitle("Tacotron2 + Waveglow GUI v%s" %0.2)
         
-<<<<<<< HEAD
-        self.GpuSwitch = Switch(thumb_radius=8, track_radius=10, show_text = False)
-        self.horizontalLayout.addWidget(self.GpuSwitch)
-        self.GpuSwitch.setEnabled(torch.cuda.is_available())
-        self.use_cuda = torch.cuda.is_available()
-=======
         self.drawGpuSwitch(self)
         self.initWidgets(self)
->>>>>>> gui
         self.GpuSwitch.toggled.connect(self.set_cuda)
 
         self.model = None
@@ -333,18 +321,12 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
             self.reload_model_flag = False
         min_donation = self.get_min_donation()
         TOKEN = self.get_token()
-<<<<<<< HEAD
-        _mutex1.lock()
-        _running = True
-        _mutex1.unlock()
-=======
         _mutex2.lock()
         _running2 = True
         _mutex2.unlock()
         _mutex3.lock()
         _running3 = True
         _mutex3.unlock()
->>>>>>> gui
         worker = Worker(self.execute_this_fn, TOKEN, min_donation, self.channel, 
                     self.se_opts, self.use_cuda, self.model, self.waveglow, 
                     self.offset, self.prev_time, self.startup_time) 
@@ -451,15 +433,11 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
                                     audio = waveglow.infer(mel_outputs_postnet, 
                                                             sigma=0.666,
                                                             progress_callback = progress_callback,
-<<<<<<< HEAD
-                                                            elapsed_callback = None)
-=======
                                                             elapsed_callback = None,
                                                             get_interruptflag = self.get_interruptflag2)
                                     if type(audio) != torch.Tensor:
                                         # Catches when waveglow is interrupted and returns none
                                         break
->>>>>>> gui
                                     fn_callback.emit(('GUI: progress bar 2 text', (count+1,len(lines))))
                                     wav = audio[0].data.cpu().numpy()
                                 output.append(wav)
@@ -809,16 +787,12 @@ class inferThread(QThread):
                 audio = self.waveglow.infer(mel_outputs_postnet, 
                                         sigma=0.666,
                                         progress_callback = self.progress,
-<<<<<<< HEAD
-                                        elapsed_callback = self.elapsed)
-=======
                                         elapsed_callback = self.elapsed,
                                         get_interruptflag = self.get_interruptflag)
                 if type(audio) != torch.Tensor:
                     # Catches when waveglow is interrupted and returns none
                     self.interruptSignal.emit()
                     return
->>>>>>> gui
                 self.iterSignal.emit((count+1,len(lines)))
                 wav = audio[0].data.cpu().numpy()
             output.append(wav)
