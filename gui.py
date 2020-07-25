@@ -4,7 +4,7 @@ from PyQt5 import QtCore,QtGui
 from PyQt5.QtCore import QMutex, QObject, QRunnable, pyqtSignal, pyqtSlot, QThreadPool, QTimer, QThread
 from PyQt5.QtWidgets import QWidget,QMainWindow,QHeaderView, QMessageBox, QFileDialog
 from nvidia_tacotron_TTS_Layout import Ui_MainWindow
-from switch import Switch
+from ui import Ui_extras
 from timerthread import timerThread
 #import traceback
 from preprocess import preprocess_text
@@ -120,7 +120,7 @@ class GUISignals(QObject):
     progress = pyqtSignal(int)   
     elapsed = pyqtSignal(int)
 
-class GUI(QMainWindow, Ui_MainWindow):
+class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
     def __init__(self,app):
         super(GUI, self).__init__()
 
@@ -128,15 +128,9 @@ class GUI(QMainWindow, Ui_MainWindow):
         self.setupUi(self)
         self.setWindowTitle("Tacotron2 + Waveglow GUI v%s" %0.2)
         
-        self.GpuSwitch = Switch(thumb_radius=8, track_radius=10, show_text = False)
-        self.horizontalLayout.addWidget(self.GpuSwitch)
-        self.GpuSwitch.setEnabled(torch.cuda.is_available())
-        self.use_cuda = False
+        self.drawGpuSwitch(self)
+        self.initWidgets(self)
         self.GpuSwitch.toggled.connect(self.set_cuda)
-        self.GpuSwitch.setToolTip("<h4>CUDA installed: {}</h4>".format(torch.cuda.is_available()))
-
-        self.progressBar2Label.setText('')
-        self.progressBarLabel.setText('')
 
         self.model = None
         self.waveglow = None
@@ -148,7 +142,6 @@ class GUI(QMainWindow, Ui_MainWindow):
         self.WGModelCombo.currentIndexChanged.connect(self.set_reload_model_flag)
         self.TTSDialogButton.clicked.connect(self.start_synthesis)
         self.TTSSkipButton.clicked.connect(self.skip_infer_playback)
-        self.TTSSkipButton.setDisabled(True)
                 
         self.logs = []
         self.logs2 = []
@@ -159,27 +152,17 @@ class GUI(QMainWindow, Ui_MainWindow):
         self.reload_model_flag = True
         
         # Because of bug in streamelements timestamp filter, need 2 variables for previous time
-        
         self.startup_time = datetime.datetime.utcnow().isoformat()
         #self.startup_time = '0' # For debugging
         self.prev_time = datetime.datetime.utcnow().isoformat() 
         #self.prev_time = '0' # for debugging
         self.offset = 0
         
-        # self.ClientStartBtn.clicked.connect(self.start_client)
         self.ClientSkipBtn.clicked.connect(self.skip_wav)
         self.channel_id = ''
-        # self.ClientStopBtn.clicked.connect(lambda: self.set_client_flag(False))
         self.client_flag = False
-        self.ClientStopBtn.setDisabled(True)
-        self.ClientSkipBtn.setDisabled(True)
-        self.TTModelCombo.setDisabled(True)
-        self.WGModelCombo.setDisabled(True)
-        self.TTSDialogButton.setDisabled(True)
         self.LoadTTButton.clicked.connect(self.add_TTmodel_path)
-        self.LoadWGButton.clicked.connect(self.add_WGmodel_path)
-        self.tab_2.setDisabled(True)
-        self.log_window2.ensureCursorVisible()
+        self.LoadWGButton.clicked.connect(self.add_WGmodel_path) 
         self.update_log_window("Begin by loading a model")
         pygame.mixer.quit()
         pygame.mixer.init(frequency=22050,size=-16, channels=1)
@@ -193,9 +176,9 @@ class GUI(QMainWindow, Ui_MainWindow):
         self.signals.progress.connect(self.update_log_bar)
         self.signals.elapsed.connect(self.on_elapsed)
 
-        self.se_opts = {'approve only': 1,
+        self.se_opts = {'approve only': 2,
                         'block large numbers': 0,
-                        'read dono amount': 1,
+                        'read dono amount': 2,
                         }
 
         # Callback functions
@@ -205,6 +188,37 @@ class GUI(QMainWindow, Ui_MainWindow):
                     'Var: offset': self.fns_var_offset,
                     'Var: prev_time': self.fns_var_prevtime,
                     'GUI: progress bar 2 text' : self.fns_gui_pbtext}
+        
+        self.OptLimitCpuBtn.stateChanged.connect(self.toggle_cpu_limit)
+        self.OptLimitCpuCombo.currentIndexChanged.connect(self.change_cpu_limit)
+        self.OptApproveDonoBtn.stateChanged.connect(self.toggle_approve_dono)
+        self.OptBlockNumberBtn.stateChanged.connect(self.toggle_block_number)
+        self.OptDonoNameAmountBtn.stateChanged.connect(self.toggle_dono_amount)
+        self.py_opts = {'cpu limit': None,}
+    
+    @pyqtSlot(int)
+    def toggle_cpu_limit(self, state):
+        self.label_10.setEnabled(state)
+        self.OptLimitCpuCombo.setEnabled(state)
+
+    @pyqtSlot(int)
+    def change_cpu_limit(self, indx):
+        num_thread = indx + 1
+        torch.set_num_threads(num_thread)
+        self.py_opts['cpu limit'] = num_thread 
+        os.environ['OMP_NUM_THREADS'] = str(num_thread )
+    
+    @pyqtSlot(int)
+    def toggle_approve_dono(self, state): 
+        self.se_opts['approve only'] = state
+
+    @pyqtSlot(int)
+    def toggle_block_number(self, state):
+        self.se_opts['block large numbers'] = state
+
+    @pyqtSlot(int)
+    def toggle_dono_amount(self, state): 
+        self.se_opts['read dono amount'] = state
 
     def fns_gui_startpolling(self,arg=None):
         self.ClientStartBtn.setDisabled(True)
@@ -429,7 +443,6 @@ class GUI(QMainWindow, Ui_MainWindow):
                             _mutex3.lock()
                             if _running3 == True:
                                 _mutex3.unlock()
-                                print('running3 False:')
                                 outwav = np.concatenate(output)
                                 # Playback
                                 fn_callback.emit(('Wav: playback',outwav))
@@ -682,7 +695,7 @@ class GUI(QMainWindow, Ui_MainWindow):
 
     def update_status_bar(self, line):
         self.statusbar.setText(line)
-        self.app.processEvents()
+        #self.app.processEvents()
 
 
     def get_token(self):
