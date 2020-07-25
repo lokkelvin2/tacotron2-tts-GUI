@@ -14,7 +14,7 @@ def break_long_sentences(text):
 
 def preprocess_text(text):
     '''
-    Takes in string, replaces numbers with words, wraps the string into a list 
+    Takes in string, replaces numbers with words, wraps the string into a list
     of multiple lines.
     '''
     text = re.sub(r"(\d+)", lambda x: num2words.num2words(int(x.group(0))), text)

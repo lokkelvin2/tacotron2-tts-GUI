@@ -10,7 +10,7 @@ class timerThread(QThread):
         super(timerThread, self).__init__(parent)
         self.timeoffset = timeoffset
         self.timeStart = None
-    
+
 
     def start(self, timeStart):
         self.timeStart = timeStart
@@ -21,4 +21,3 @@ class timerThread(QThread):
         while self.parent().isRunning():
             self.timeElapsed.emit(time.time() - self.timeStart + self.timeoffset)
             time.sleep(1)
-   
