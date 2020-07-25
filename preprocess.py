@@ -19,5 +19,6 @@ def preprocess_text(text):
     '''
     text = re.sub(r"(\d+)", lambda x: num2words.num2words(int(x.group(0))), text)
     lines = break_long_sentences(text)
-    lines[-1] = add_fullstop(lines[-1])
+    if lines:
+        lines[-1] = add_fullstop(lines[-1])
     return lines
