@@ -30,6 +30,29 @@ class Ui_extras(object):
             [str(i) for i in range(1,torch.get_num_threads()+1)])
         MainWindow.OptLimitCpuCombo.setCurrentIndex(torch.get_num_threads()-1)
 
+    def setUpconnections(self,MainWindow):
+        # Static widget signals
+        MainWindow.TTModelCombo.currentIndexChanged.connect(MainWindow.set_reload_model_flag)
+        MainWindow.WGModelCombo.currentIndexChanged.connect(MainWindow.set_reload_model_flag)
+        MainWindow.TTSDialogButton.clicked.connect(MainWindow.start_synthesis)
+        MainWindow.TTSSkipButton.clicked.connect(MainWindow.skip_infer_playback)
+        MainWindow.ClientSkipBtn.clicked.connect(MainWindow.skip_wav)
+        MainWindow.LoadTTButton.clicked.connect(MainWindow.add_TTmodel_path)
+        MainWindow.LoadWGButton.clicked.connect(MainWindow.add_WGmodel_path)
+        MainWindow.ClientStartBtn.clicked.connect(MainWindow.start_eventloop)
+        MainWindow.ClientStopBtn.clicked.connect(MainWindow.stop)
+        MainWindow.OptLimitCpuBtn.stateChanged.connect(MainWindow.toggle_cpu_limit)
+        MainWindow.OptLimitCpuCombo.currentIndexChanged.connect(MainWindow.change_cpu_limit)
+        MainWindow.OptApproveDonoBtn.stateChanged.connect(MainWindow.toggle_approve_dono)
+        MainWindow.OptBlockNumberBtn.stateChanged.connect(MainWindow.toggle_block_number)
+        MainWindow.OptDonoNameAmountBtn.stateChanged.connect(MainWindow.toggle_dono_amount)
+        # Instantiated widget signals
+        MainWindow.GpuSwitch.toggled.connect(MainWindow.set_cuda)
+        # Instantiated signals
+        MainWindow.signals.progress.connect(MainWindow.update_log_bar)
+        MainWindow.signals.elapsed.connect(MainWindow.on_elapsed)
+
+
 
 
 

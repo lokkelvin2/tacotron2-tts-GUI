@@ -6,11 +6,9 @@ from PyQt5.QtWidgets import QWidget,QMainWindow,QHeaderView, QMessageBox, QFileD
 from nvidia_tacotron_TTS_Layout import Ui_MainWindow
 from ui import Ui_extras
 from timerthread import timerThread
-#import traceback
 from preprocess import preprocess_text
 
 import time
-from urllib.parse import urlparse
 import requests
 import json
 import datetime
@@ -30,9 +28,9 @@ from train import load_model
 from text import text_to_sequence, cleaners
 #from denoiser import Denoiser
 
-#from secrets import TOKEN
+#from secrets import TOKEN # for debugging
 
-_mutex1 = QMutex()
+_mutex1 = QMutex() 
 _running1 = False # tab 0 synthesis QThread : Start/stop
 _mutex2 = QMutex()
 _running2 = False # tab 1 eventloop QRunnable: Start/stop
@@ -123,78 +121,60 @@ class GUISignals(QObject):
 class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
     def __init__(self,app):
         super(GUI, self).__init__()
-
         self.app = app
+
+        ### Setup UI and signals
         self.setupUi(self)
         self.setWindowTitle("Tacotron2 + Waveglow GUI v%s" %0.2)
-
         self.drawGpuSwitch(self)
         self.initWidgets(self)
-        self.GpuSwitch.toggled.connect(self.set_cuda)
+        self.signals = GUISignals()
+        self.setUpconnections(self)
 
+        ### Init vars
         self.model = None
         self.waveglow = None
         self.hparams = None
         self.current_thread = None
-        self.t_1 = None
-
-        self.TTModelCombo.currentIndexChanged.connect(self.set_reload_model_flag)
-        self.WGModelCombo.currentIndexChanged.connect(self.set_reload_model_flag)
-        self.TTSDialogButton.clicked.connect(self.start_synthesis)
-        self.TTSSkipButton.clicked.connect(self.skip_infer_playback)
-
-        self.logs = []
+        self.t_1 = None # timing
+        self.logs = [] # message logs
         self.logs2 = []
         self.max_log_lines = 3
         self.max_log2_lines = 100
-        self.TTmodel_dir = [] # Stores list of paths
+        self.TTmodel_dir = [] # list of model paths
         self.WGmodel_dir = []
         self.reload_model_flag = True
-
+        self.channel_id = '' # stream elements channel ID
         # Because of bug in streamelements timestamp filter, need 2 variables for previous time
         self.startup_time = datetime.datetime.utcnow().isoformat()
         #self.startup_time = '0' # For debugging
         self.prev_time = datetime.datetime.utcnow().isoformat()
         #self.prev_time = '0' # for debugging
-        self.offset = 0
-
-        self.ClientSkipBtn.clicked.connect(self.skip_wav)
-        self.channel_id = ''
-        self.client_flag = False
-        self.LoadTTButton.clicked.connect(self.add_TTmodel_path)
-        self.LoadWGButton.clicked.connect(self.add_WGmodel_path)
-        self.update_log_window("Begin by loading a model")
-        pygame.mixer.quit()
-        pygame.mixer.init(frequency=22050,size=-16, channels=1)
-        self.channel = pygame.mixer.Channel(0)
-
-        self.ClientStartBtn.clicked.connect(self.start)
-        self.ClientStopBtn.clicked.connect(self.stop)
-        self.threadpool = QThreadPool()
-        print("Multithreading with maximum %d threads" % self.threadpool.maxThreadCount())
-        self.signals = GUISignals()
-        self.signals.progress.connect(self.update_log_bar)
-        self.signals.elapsed.connect(self.on_elapsed)
-
-        self.se_opts = {'approve only': 2,
+        self.msg_offset = 0
+        self.se_opts = {'approve only': 2, # Stream element options
                         'block large numbers': 0,
                         'read dono amount': 2,
                         }
-
-        # Callback functions
-        self.fns = {'GUI: start of polling loop': self.fns_gui_startpolling,
+        self.fns = {'GUI: start of polling loop': self.fns_gui_startpolling, # Callback functions
                     'GUI: end of polling loop': self.fns_gui_endpolling ,
                     'Wav: playback' : self.fns_wav_playback,
                     'Var: offset': self.fns_var_offset,
                     'Var: prev_time': self.fns_var_prevtime,
                     'GUI: progress bar 2 text' : self.fns_gui_pbtext}
+        self.pyt_opts = {'cpu limit': None, # pytorch options
+                        'denoiser':None}
+        
+        ### Init pygame mixer
+        pygame.mixer.quit()
+        pygame.mixer.init(frequency=22050,size=-16, channels=1)
+        self.channel = pygame.mixer.Channel(0)
+        
+        ### Init qthreadpool
+        self.threadpool = QThreadPool()
+        print("Multithreading with maximum %d threads" % self.threadpool.maxThreadCount())
 
-        self.OptLimitCpuBtn.stateChanged.connect(self.toggle_cpu_limit)
-        self.OptLimitCpuCombo.currentIndexChanged.connect(self.change_cpu_limit)
-        self.OptApproveDonoBtn.stateChanged.connect(self.toggle_approve_dono)
-        self.OptBlockNumberBtn.stateChanged.connect(self.toggle_block_number)
-        self.OptDonoNameAmountBtn.stateChanged.connect(self.toggle_dono_amount)
-        self.py_opts = {'cpu limit': None,}
+        ### Setup Complete
+        self.update_log_window("Begin by loading a model")
 
     @pyqtSlot(int)
     def toggle_cpu_limit(self, state):
@@ -205,7 +185,7 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
     def change_cpu_limit(self, indx):
         num_thread = indx + 1
         torch.set_num_threads(num_thread)
-        self.py_opts['cpu limit'] = num_thread
+        self.pyt_opts['cpu limit'] = num_thread
         os.environ['OMP_NUM_THREADS'] = str(num_thread )
 
     @pyqtSlot(int)
@@ -219,43 +199,6 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
     @pyqtSlot(int)
     def toggle_dono_amount(self, state):
         self.se_opts['read dono amount'] = state
-
-    def fns_gui_startpolling(self,arg=None):
-        self.ClientStartBtn.setDisabled(True)
-        self.ClientStopBtn.setEnabled(True)
-        self.ClientSkipBtn.setEnabled(True)
-        self.tab.setDisabled(True)
-        self.ClientAmountLine.setDisabled(True)
-
-    def fns_gui_endpolling(self,arg=None):
-        self.update_log_bar2(0)
-        self.progressBar2Label.setText('')
-        self.ClientStartBtn.setEnabled(True)
-        self.ClientStopBtn.setDisabled(True)
-        self.ClientSkipBtn.setDisabled(True)
-        self.tab.setEnabled(True)
-        self.ClientAmountLine.setEnabled(True)
-
-    def fns_wav_playback(self,wav):
-        if self.tabWidget.currentIndex()==0:
-            self.TTSSkipButton.setEnabled(True)
-        else:
-            self.ClientSkipBtn.setEnabled(True)
-        if wav.dtype != np.int16 :
-            # Convert from float32 or float16 to signed int16 for pygame
-            wav = (wav/np.amax(wav) * 32767).astype(np.int16)
-        sound = pygame.mixer.Sound(wav)
-        self.channel.queue(sound)
-
-    def fns_var_offset(self,arg):
-        self.offset = arg
-
-    def fns_var_prevtime(self,arg):
-        self.prev_time = arg
-
-    def fns_gui_pbtext(self,tup):
-        current,total = tup
-        self.progressBar2Label.setText('{}/{}'.format(current,total))
 
     @pyqtSlot(tuple)
     def on_fncallback(self,tup):
@@ -302,6 +245,91 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
         else:
             pass # No elapsed time for tab2
 
+    @pyqtSlot(np.ndarray)
+    def on_inferThread_complete(self,wav):
+        global _running1
+        _mutex1.lock()
+        _running1 = False
+        _mutex1.unlock()
+        self.playback_wav(wav)
+        self.TTSDialogButton.setEnabled(True)
+        self.TTModelCombo.setEnabled(True)
+        self.WGModelCombo.setEnabled(True)
+        self.TTSTextEdit.setEnabled(True)
+        self.LoadTTButton.setEnabled(True)
+        self.LoadWGButton.setEnabled(True)
+        self.tab_2.setEnabled(True)
+        elapsed = (time.time() - self.t_1)
+        wav_length = (len(wav) / self.hparams.sampling_rate)
+        rtf = elapsed / wav_length
+        line = 'Generated {:.1f}s of audio in {:.1f}s ({:.2f} real-time factor)'.format(wav_length,elapsed,rtf)
+        self.update_log_window(line,'overwrite')
+        tps = elapsed / len(wav)
+        print(" > Run-time: {}".format(elapsed))
+        print(" > Real-time factor: {}".format(rtf))
+        print(" > Time per step: {}".format(tps))
+        self.update_status_bar("Ready")
+        # TODO get pygame mixer callback on end or use sounddevice
+
+    @pyqtSlot(tuple)
+    def on_itersignal(self,tup):
+        current,total = tup
+        self.progressBarLabel.setText('{}/{}'.format(current,total))
+
+    @pyqtSlot()
+    def on_interrupt(self):
+        # Reenable buttons
+        self.TTSDialogButton.setEnabled(True)
+        self.TTModelCombo.setEnabled(True)
+        self.WGModelCombo.setEnabled(True)
+        self.TTSTextEdit.setEnabled(True)
+        self.LoadTTButton.setEnabled(True)
+        self.LoadWGButton.setEnabled(True)
+        self.tab_2.setEnabled(True)
+        # Refresh progress bar
+        self.update_log_bar(0)
+        self.progressBarLabel.setText('')
+        # Write to log window
+        self.update_log_window('Interrupted','overwrite')
+        # Write to status bar
+        self.update_status_bar("Ready")
+
+    def fns_gui_startpolling(self,arg=None):
+        self.ClientStartBtn.setDisabled(True)
+        self.ClientStopBtn.setEnabled(True)
+        self.ClientSkipBtn.setEnabled(True)
+        self.tab.setDisabled(True)
+        self.ClientAmountLine.setDisabled(True)
+
+    def fns_gui_endpolling(self,arg=None):
+        self.update_log_bar2(0)
+        self.progressBar2Label.setText('')
+        self.ClientStartBtn.setEnabled(True)
+        self.ClientStopBtn.setDisabled(True)
+        self.ClientSkipBtn.setDisabled(True)
+        self.tab.setEnabled(True)
+        self.ClientAmountLine.setEnabled(True)
+
+    def fns_wav_playback(self,wav):
+        if self.tabWidget.currentIndex()==0:
+            self.TTSSkipButton.setEnabled(True)
+        else:
+            self.ClientSkipBtn.setEnabled(True)
+        if wav.dtype != np.int16 :
+            # Convert from float32 or float16 to signed int16 for pygame
+            wav = (wav/np.amax(wav) * 32767).astype(np.int16)
+        sound = pygame.mixer.Sound(wav)
+        self.channel.queue(sound)
+
+    def fns_var_offset(self,arg):
+        self.msg_offset = arg
+
+    def fns_var_prevtime(self,arg):
+        self.prev_time = arg
+
+    def fns_gui_pbtext(self,tup):
+        current,total = tup
+        self.progressBar2Label.setText('{}/{}'.format(current,total))
 
     def on_finished(self):
         #print("THREAD COMPLETE!")
@@ -311,7 +339,7 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
         #print(s)
         pass
 
-    def start(self):
+    def start_eventloop(self):
         # Pass the function to execute
         global _running2,_running3
         if not self.validate_se():
@@ -327,9 +355,9 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
         _mutex3.lock()
         _running3 = True
         _mutex3.unlock()
-        worker = Worker(self.execute_this_fn, TOKEN, min_donation, self.channel,
+        worker = Worker(self.eventloop, TOKEN, min_donation, self.channel,
                     self.se_opts, self.use_cuda, self.model, self.waveglow,
-                    self.offset, self.prev_time, self.startup_time)
+                    self.msg_offset, self.prev_time, self.startup_time)
                     # Any other args, kwargs are passed to the run function
         worker.signals.result.connect(self.on_result)
         worker.signals.finished.connect(self.on_finished)
@@ -337,7 +365,6 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
         worker.signals.textready.connect(self.on_textready)
         worker.signals.elapsed.connect(self.on_elapsed)
         worker.signals.fncallback.connect(self.on_fncallback)
-
         # Execute
         self.threadpool.start(worker)
 
@@ -358,16 +385,7 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
         _mutex3.unlock()
         self.skip_wav()
 
-    # def progress_fn(self, n):
-    #     print("%d%% done" % n)
-
-    def get_interruptflag2(self):
-        _mutex3.lock()
-        val = _running3
-        _mutex3.unlock()
-        return val
-
-    def execute_this_fn(self, TOKEN, min_donation, channel, se_opts,
+    def eventloop(self, TOKEN, min_donation, channel, se_opts,
                     use_cuda, model, waveglow,
                     offset, prev_time, startup_time,
                     progress_callback, elapsed_callback, text_ready, fn_callback):
@@ -457,86 +475,13 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
         fn_callback.emit(('Var: prev_time', prev_time))
         return #'Return value of execute_this_fn'
 
-    def set_reload_model_flag(self):
-        self.reload_model_flag = True
-
-    def set_cuda(self):
-        self.use_cuda = self.GpuSwitch.isChecked()
-        self.reload_model_flag = True
-
     def startup_update(self):
         if not self.tab_2.isEnabled():
             self.tab_2.setEnabled(True)
         if not self.TTSDialogButton.isEnabled():
             self.TTSDialogButton.setEnabled(True)
 
-    def add_TTmodel_path(self):
-        fpath = str(QFileDialog.getOpenFileName(self,
-                                            'Select Tacotron2 model',
-                                            filter='*.pt')[0])
-        if not fpath: # If no folder selected
-            return
-        if fpath not in self.TTmodel_dir:
-            head,tail = os.path.split(fpath) # Split into parent and child dir
-            self.TTmodel_dir.append(fpath) # Save full path
-            self.populate_modelcombo(tail, self.TTModelCombo)
-            self.update_log_window("Added Tacotron 2 model: "+tail)
-            if self.WGModelCombo.count() > 0:
-                self.startup_update()
-
-    def add_WGmodel_path(self):
-        fpath = str(QFileDialog.getOpenFileName(self,
-                                            'Select Waveglow model',
-                                            filter='*.pt')[0])
-        if not fpath: # If no folder selected
-            return
-        if fpath not in self.WGmodel_dir:
-            head,tail = os.path.split(fpath) # Split into parent and child dir
-            self.WGmodel_dir.append(fpath) # Save full path
-            self.populate_modelcombo(tail, self.WGModelCombo)
-            self.update_log_window("Added Waveglow model: "+tail)
-            if self.TTModelCombo.count() > 0:
-                self.startup_update()
-
-    def populate_modelcombo(self, item, combobox):
-        combobox.addItem(item)
-        combobox.setCurrentIndex(combobox.count()-1)
-        if not combobox.isEnabled():
-            combobox.setEnabled(True)
-
-    def get_current_TTmodel_dir(self):
-        return self.TTmodel_dir[self.TTModelCombo.currentIndex()]
-
-    def get_current_WGmodel_dir(self):
-        return self.WGmodel_dir[self.WGModelCombo.currentIndex()]
-
-    def get_current_TTmodel_fname(self):
-        return self.TTModelCombo.currentText()
-
-    def get_current_WGmodel_fname(self):
-        return self.WGModelCombo.currentText()
-
-    def update_log_window(self, line, mode="newline"):
-        if mode == "newline" or not self.logs:
-            self.logs.append(line)
-            if len(self.logs) > self.max_log_lines:
-                del self.logs[0]
-        elif mode == "append":
-            self.logs[-1] += line
-        elif mode == "overwrite":
-            self.logs[-1] = line
-        elif mode == "clear":
-            self.logs = [line]
-        log_text = '\n'.join(self.logs)
-
-        self.log_window1.setText(log_text)
-        #self.app.processEvents()
-
     def playback_wav(self,wav):
-        #if self.tabWidget.currentIndex()==0:
-        #    self.TTSSkipButton.setEnabled(True)
-        #else:
-        #    self.ClientSkipBtn.setEnabled(True)
         if self.tabWidget.currentIndex()==1:
             self.ClientSkipBtn.setEnabled(True)
         if wav.dtype != np.int16 :
@@ -561,8 +506,6 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
             _running1 = False   # instead of mutex since inference is on QThread
         _mutex1.unlock()
         self.TTSSkipButton.setDisabled(True)
-
-
 
     def reload_model(self):
         TTmodel_fpath = self.get_current_TTmodel_dir()
@@ -628,88 +571,6 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
         self.current_thread.iterSignal.connect(self.on_itersignal)
         self.current_thread.interruptSignal.connect(self.on_interrupt)
 
-    @pyqtSlot(np.ndarray)
-    def on_inferThread_complete(self,wav):
-        global _running1
-        _mutex1.lock()
-        _running1 = False
-        _mutex1.unlock()
-        #audio_denoised = denoiser(audio, strength=0.01)[:, 0]
-        #wav = audio_denoised.cpu().numpy()
-        self.playback_wav(wav)
-        self.TTSDialogButton.setEnabled(True)
-        self.TTModelCombo.setEnabled(True)
-        self.WGModelCombo.setEnabled(True)
-        self.TTSTextEdit.setEnabled(True)
-        self.LoadTTButton.setEnabled(True)
-        self.LoadWGButton.setEnabled(True)
-        self.tab_2.setEnabled(True)
-        elapsed = (time.time() - self.t_1)
-        wav_length = (len(wav) / self.hparams.sampling_rate)
-        rtf = elapsed / wav_length
-        line = 'Generated {:.1f}s of audio in {:.1f}s ({:.2f} real-time factor)'.format(wav_length,elapsed,rtf)
-        self.update_log_window(line,'overwrite')
-        tps = elapsed / len(wav)
-        print(" > Run-time: {}".format(elapsed))
-        print(" > Real-time factor: {}".format(rtf))
-        print(" > Time per step: {}".format(tps))
-        self.update_status_bar("Ready")
-
-        # TODO get pygame mixer callback on end or use sounddevice
-
-    @pyqtSlot(tuple)
-    def on_itersignal(self,tup):
-        current,total = tup
-        self.progressBarLabel.setText('{}/{}'.format(current,total))
-
-    @pyqtSlot()
-    def on_interrupt(self):
-        # Reenable buttons
-        self.TTSDialogButton.setEnabled(True)
-        self.TTModelCombo.setEnabled(True)
-        self.WGModelCombo.setEnabled(True)
-        self.TTSTextEdit.setEnabled(True)
-        self.LoadTTButton.setEnabled(True)
-        self.LoadWGButton.setEnabled(True)
-        self.tab_2.setEnabled(True)
-        # Refresh progress bar
-        self.update_log_bar(0)
-        self.progressBarLabel.setText('')
-        # Write to log window
-        self.update_log_window('Interrupted','overwrite')
-        # Write to status bar
-        self.update_status_bar("Ready")
-
-
-    def update_log_window_2(self, line, mode="newline"):
-        if mode == "newline" or not self.logs2:
-            self.logs2.append(line)
-        elif mode == "append":
-            self.logs2[-1] += line
-        elif mode == "overwrite":
-            self.logs2[-1] = line
-        log_text = '\n'.join(self.logs2)
-
-        self.log_window2.setPlainText(log_text)
-        self.log_window2.verticalScrollBar().setValue(
-            self.log_window2.verticalScrollBar().maximum())
-        self.app.processEvents()
-
-    def update_status_bar(self, line):
-        self.statusbar.setText(line)
-        #self.app.processEvents()
-
-
-    def get_token(self):
-        TOKEN = ''.join(self.APIKeyLine.text().split())
-        return TOKEN
-        #tokenobj = TOKEN()
-        #return tokenobj.token
-
-
-    def set_client_flag(self,val):
-        self.client_flag = val
-
     def validate_se(self):
         # Connect to streamelement and saves channel id
         # return true if chn id and token returns valid
@@ -728,7 +589,6 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
             response2 = requests.request("GET", url, headers=headers, params=querystring)
             if response2.status_code == 200:
                 self.update_log_window_2("\nConnected to "+CHANNEL_NAME)
-                self.set_client_flag(True)
                 return True
             else:
                 self.update_log_window_2("\nError: Double check your token")
@@ -743,6 +603,100 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
 
     def get_min_donation(self):
         return float(self.ClientAmountLine.value())
+
+    def get_token(self):
+        TOKEN = ''.join(self.APIKeyLine.text().split())
+        return TOKEN
+        #tokenobj = TOKEN() # for debugging
+        #return tokenobj.token # for debugging
+
+    def get_current_TTmodel_dir(self):
+        return self.TTmodel_dir[self.TTModelCombo.currentIndex()]
+
+    def get_current_WGmodel_dir(self):
+        return self.WGmodel_dir[self.WGModelCombo.currentIndex()]
+
+    def get_current_TTmodel_fname(self):
+        return self.TTModelCombo.currentText()
+
+    def get_current_WGmodel_fname(self):
+        return self.WGModelCombo.currentText()
+
+    def get_interruptflag2(self):
+        _mutex3.lock()
+        val = _running3
+        _mutex3.unlock()
+        return val
+
+    def set_reload_model_flag(self):
+        self.reload_model_flag = True
+
+    def set_cuda(self):
+        self.use_cuda = self.GpuSwitch.isChecked()
+        self.reload_model_flag = True
+
+    def add_TTmodel_path(self):
+        fpath = str(QFileDialog.getOpenFileName(self,
+                                            'Select Tacotron2 model',
+                                            filter='*.pt')[0])
+        if not fpath: # If no folder selected
+            return
+        if fpath not in self.TTmodel_dir:
+            head,tail = os.path.split(fpath) # Split into parent and child dir
+            self.TTmodel_dir.append(fpath) # Save full path
+            self.populate_modelcombo(tail, self.TTModelCombo)
+            self.update_log_window("Added Tacotron 2 model: "+tail)
+            if self.WGModelCombo.count() > 0:
+                self.startup_update()
+
+    def add_WGmodel_path(self):
+        fpath = str(QFileDialog.getOpenFileName(self,
+                                            'Select Waveglow model',
+                                            filter='*.pt')[0])
+        if not fpath: # If no folder selected
+            return
+        if fpath not in self.WGmodel_dir:
+            head,tail = os.path.split(fpath) # Split into parent and child dir
+            self.WGmodel_dir.append(fpath) # Save full path
+            self.populate_modelcombo(tail, self.WGModelCombo)
+            self.update_log_window("Added Waveglow model: "+tail)
+            if self.TTModelCombo.count() > 0:
+                self.startup_update()
+
+    def populate_modelcombo(self, item, combobox):
+        combobox.addItem(item)
+        combobox.setCurrentIndex(combobox.count()-1)
+        if not combobox.isEnabled():
+            combobox.setEnabled(True)
+
+    def update_log_window(self, line, mode="newline"):
+        if mode == "newline" or not self.logs:
+            self.logs.append(line)
+            if len(self.logs) > self.max_log_lines:
+                del self.logs[0]
+        elif mode == "append":
+            self.logs[-1] += line
+        elif mode == "overwrite":
+            self.logs[-1] = line
+        elif mode == "clear":
+            self.logs = [line]
+        log_text = '\n'.join(self.logs)
+        self.log_window1.setText(log_text)
+
+    def update_log_window_2(self, line, mode="newline"):
+        if mode == "newline" or not self.logs2:
+            self.logs2.append(line)
+        elif mode == "append":
+            self.logs2[-1] += line
+        elif mode == "overwrite":
+            self.logs2[-1] = line
+        log_text = '\n'.join(self.logs2)
+        self.log_window2.setPlainText(log_text)
+        self.log_window2.verticalScrollBar().setValue(
+            self.log_window2.verticalScrollBar().maximum())
+
+    def update_status_bar(self, line):
+        self.statusbar.setText(line)
 
 class inferThread(QThread):
     timeElapsed = pyqtSignal(int)
@@ -798,8 +752,6 @@ class inferThread(QThread):
             output.append(wav)
         outwav = np.concatenate(output)
         self.audioSignal.emit(outwav)
-
-
 
     def get_interruptflag(self):
         _mutex1.lock()
