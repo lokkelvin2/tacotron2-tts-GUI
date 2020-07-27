@@ -8,6 +8,7 @@ __pycache__/
 
 # Distribution / packaging
 .Python
+env/
 build/
 develop-eggs/
 dist/
@@ -25,6 +26,9 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+*.egg-info/
+.installed.cfg
+*.egg
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -50,6 +54,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+*,cover
 
 # Translations
 *.mo
@@ -112,6 +117,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+virtualenv/
 
 # Spyder project settings
 .spyderproject
@@ -136,9 +142,11 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+
+# Others
 .ipynb_checkpoints/
 .vs/
 srt2fcpxml.py
-virtualenv/
 secrets.py
 .vscode/
+target/
