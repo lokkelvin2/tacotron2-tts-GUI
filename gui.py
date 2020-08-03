@@ -28,7 +28,7 @@ from train import load_model
 from text import text_to_sequence, cleaners
 #from denoiser import Denoiser
 
-#from secrets import TOKEN # for debugging
+from secrets import TOKEN # for debugging
 
 _mutex1 = QMutex()
 _running1 = False # tab 0 synthesis QThread : Start/stop
@@ -145,10 +145,10 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
         self.reload_model_flag = True
         self.channel_id = '' # stream elements channel ID
         # Because of bug in streamelements timestamp filter, need 2 variables for previous time
-        self.startup_time = datetime.datetime.utcnow().isoformat()
-        #self.startup_time = '0' # For debugging
-        self.prev_time = datetime.datetime.utcnow().isoformat()
-        #self.prev_time = '0' # for debugging
+        #self.startup_time = datetime.datetime.utcnow().isoformat()
+        self.startup_time = '0' # For debugging
+        #self.prev_time = datetime.datetime.utcnow().isoformat()
+        self.prev_time = '0' # for debugging
         self.msg_offset = 0
         self.se_opts = {'approve only': 2, # Stream element options
                         'block large numbers': 0,
@@ -429,7 +429,11 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
                     offset += 1
                     if dono_time > prev_time: # Str comparison
                         amount = dono['donation']['amount'] # Int
-                        if float(amount) >= min_donation and dono['approved']=='allowed':
+                        if se_opts['approve only'] == 2:
+                            approved = dono['approved']=='allowed'
+                        else:
+                            approved = True
+                        if float(amount) >= min_donation and approved:
                             _mutex3.lock()
                             if not _running3: 
                                 _running3 = True
@@ -445,7 +449,7 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
                             text_ready.emit("Log2:"+name+' donated '+currency+str(amount))
                             text_ready.emit("Log2:"+msg)
                             lines = preprocess_text(msg)
-                            if se_opts['read dono amount'] == 1: # reads dono name and amount
+                            if se_opts['read dono amount'] == 2: # reads dono name and amount
                                 msg = '{} donated {} {}.'.format(name,
                                                     str(amount),
                                                     cleaners.expand_currency(currency))
@@ -619,10 +623,10 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
         return float(self.ClientAmountLine.value())
 
     def get_token(self):
-        TOKEN = ''.join(self.APIKeyLine.text().split())
-        return TOKEN
-        #tokenobj = TOKEN() # for debugging
-        #return tokenobj.token # for debugging
+        #TOKEN = ''.join(self.APIKeyLine.text().split())
+        #return TOKEN
+        tokenobj = TOKEN() # for debugging
+        return tokenobj.token # for debugging
 
     def get_current_TTmodel_dir(self):
         return self.TTmodel_dir[self.TTModelCombo.currentIndex()]
