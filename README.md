@@ -10,6 +10,8 @@ Main UI | Stream Elements integration
 ------------ | -------------
 <img src="https://i.imgur.com/xeT74vJ.png" height="430" align="left">|<img src="https://i.imgur.com/tjC2q6j.png" height="430" align="left">
 
+# Original Repo: 
+
 # Tacotron 2 (without wavenet)
 
 PyTorch implementation of [Natural TTS Synthesis By Conditioning
