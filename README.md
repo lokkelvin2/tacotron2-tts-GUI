@@ -1,14 +1,49 @@
-## GUI Work in Progress (update 21 July 2020)
+## GUI Work in Progress (update 4 August 2020)
 GUI wrapper for synthesize. Allows CPU-only synthesis via a toggleable switch. Portable exe file is available (that runs on CPU only).
 
 Also plays TTS donations alerts from Stream Elements.
 
-## Download Link
-A portable executable can be found at the [Releases](https://github.com/lokkelvin2/tacotron2_GUI/releases) page, or directly [here](https://github.com/lokkelvin2/tacotron2_GUI/releases/download/v0.2/nvidia_waveglow-v0.2_x86_64.exe). Download a pretrained *Tacotron 2* and *Waveglow* model from below.
-
 Main UI | Stream Elements integration
 ------------ | -------------
 <img src="https://i.imgur.com/xeT74vJ.png" height="430" align="left">|<img src="https://i.imgur.com/tjC2q6j.png" height="430" align="left">
+# Overview
+A machine learning based Text to Speech program with a user friendly GUI. Target audience include Twitch streamers or content creators looking for an open source TTS program. The aim of this software is to make tts synthesis accessible offline (No coding experience, gpu/colab) in a portable exe.
+
+## Features
+  * Reads donations from Stream Elements automatically
+  * PyQt5 wrapper for NVIDIA/tacotron2 & /waveglow
+
+## Download Link
+A portable executable can be found at the [Releases](https://github.com/lokkelvin2/tacotron2_GUI/releases) page, or directly [here](https://github.com/lokkelvin2/tacotron2_GUI/releases/download/v0.2/nvidia_waveglow-v0.2_x86_64.exe). Download a pretrained *Tacotron 2* and *Waveglow* model from below.
+
+Warning: the portable executable runs on CPU which leads to a >10x speed slowdown compared to running it on GPU. 
+
+# Building from source
+## Requirements
+  * Python >=3.7
+  * librosa
+  * numpy
+  * PyQt5==5.15.0
+  * requests
+  * tqdm
+  * matplotlib
+  * scipy
+  * num2words
+  * pygame
+  
+[PyTorch 1.0](https://pytorch.org/)
+  
+## To Run
+``` 
+python gui.py
+```
+## License
+* NVIDIA/tacotron2 & waveglow: BSD-3-Clause License
+
+## Notes
+  * TTS code from [NVIDIA/tacotron2](https://github.com/NVIDIA/tacotron2)
+  * Partial GUI code from [https://github.com/CorentinJ/Real-Time-Voice-Cloning](https://github.com/CorentinJ/Real-Time-Voice-Cloning) and layout inspired by u/realstreamer's Forsen TTS [https://www.youtube.com/watch?v=kL2tglbcDCo](https://www.youtube.com/watch?v=kL2tglbcDCo)
+
 
 # Original Repo: 
 
