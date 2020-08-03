@@ -30,7 +30,7 @@ from text import text_to_sequence, cleaners
 
 #from secrets import TOKEN # for debugging
 
-_mutex1 = QMutex() 
+_mutex1 = QMutex()
 _running1 = False # tab 0 synthesis QThread : Start/stop
 _mutex2 = QMutex()
 _running2 = False # tab 1 eventloop QRunnable: Start/stop
@@ -125,7 +125,6 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
 
         ### Setup UI and signals
         self.setupUi(self)
-        self.setWindowTitle("Tacotron2 + Waveglow GUI v%s" %0.2)
         self.drawGpuSwitch(self)
         self.initWidgets(self)
         self.signals = GUISignals()
@@ -160,7 +159,8 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
                     'Wav: playback' : self.fns_wav_playback,
                     'Var: offset': self.fns_var_offset,
                     'Var: prev_time': self.fns_var_prevtime,
-                    'GUI: progress bar 2 text' : self.fns_gui_pbtext}
+                    'GUI: progress bar 2 text' : self.fns_gui_pbtext,
+                    'GUI: reenable skip btn' : self.fns_gui_enableclientskipbtn}
         self.pyt_opts = {'cpu limit': None, # pytorch options
                         'denoiser':None}
         
@@ -184,9 +184,7 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
     @pyqtSlot(int)
     def change_cpu_limit(self, indx):
         num_thread = indx + 1
-        torch.set_num_threads(num_thread)
         self.pyt_opts['cpu limit'] = num_thread
-        os.environ['OMP_NUM_THREADS'] = str(num_thread )
 
     @pyqtSlot(int)
     def toggle_approve_dono(self, state):
@@ -273,6 +271,7 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
 
     @pyqtSlot(tuple)
     def on_itersignal(self,tup):
+        # Displays current iteration on progress bar
         current,total = tup
         self.progressBarLabel.setText('{}/{}'.format(current,total))
 
@@ -299,6 +298,7 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
         self.ClientStopBtn.setEnabled(True)
         self.ClientSkipBtn.setEnabled(True)
         self.tab.setDisabled(True)
+        self.tab_3.setDisabled(True)
         self.ClientAmountLine.setDisabled(True)
 
     def fns_gui_endpolling(self,arg=None):
@@ -308,11 +308,12 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
         self.ClientStopBtn.setDisabled(True)
         self.ClientSkipBtn.setDisabled(True)
         self.tab.setEnabled(True)
+        self.tab_3.setEnabled(True)
         self.ClientAmountLine.setEnabled(True)
 
     def fns_wav_playback(self,wav):
         if self.tabWidget.currentIndex()==0:
-            self.TTSSkipButton.setEnabled(True)
+            self.TTSStopButton.setEnabled(True)
         else:
             self.ClientSkipBtn.setEnabled(True)
         if wav.dtype != np.int16 :
@@ -330,6 +331,9 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
     def fns_gui_pbtext(self,tup):
         current,total = tup
         self.progressBar2Label.setText('{}/{}'.format(current,total))
+
+    def fns_gui_enableclientskipbtn(self,arg=None):
+        self.ClientSkipBtn.setEnabled(True)
 
     def on_finished(self):
         #print("THREAD COMPLETE!")
@@ -356,7 +360,7 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
         _running3 = True
         _mutex3.unlock()
         worker = Worker(self.eventloop, TOKEN, min_donation, self.channel,
-                    self.se_opts, self.use_cuda, self.model, self.waveglow,
+                    self.se_opts, self.use_cuda, self.model, self.waveglow, self.pyt_opts['cpu limit'],
                     self.msg_offset, self.prev_time, self.startup_time)
                     # Any other args, kwargs are passed to the run function
         worker.signals.result.connect(self.on_result)
@@ -368,7 +372,7 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
         # Execute
         self.threadpool.start(worker)
 
-    def stop(self):
+    def stop_eventloop(self):
         global _running2, _running3
         _mutex2.lock()
         _running2 = False
@@ -378,7 +382,7 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
         _mutex3.unlock()
         self.skip_wav()
 
-    def skip(self):
+    def skip_eventloop(self):
         global _running3
         _mutex3.lock()
         _running3 = False
@@ -386,10 +390,15 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
         self.skip_wav()
 
     def eventloop(self, TOKEN, min_donation, channel, se_opts,
-                    use_cuda, model, waveglow,
+                    use_cuda, model, waveglow, num_thread,
                     offset, prev_time, startup_time,
                     progress_callback, elapsed_callback, text_ready, fn_callback):
         # TODO: refactor this messy block
+        global _running3
+        if num_thread:
+            torch.set_num_threads(num_thread)
+            os.environ['OMP_NUM_THREADS'] = str(num_thread)
+            os.environ['MKL_NUM_THREADS'] = str(num_thread)
         fn_callback.emit(('GUI: start of polling loop',None))
         text_ready.emit("Sta2:Connecting to StreamElements")
         url = "https://api.streamelements.com/kappa/v2/tips/"+self.channel_id
@@ -422,6 +431,11 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
                     if dono_time > prev_time: # Str comparison
                         amount = dono['donation']['amount'] # Int
                         if float(amount) >= min_donation and dono['approved']=='allowed':
+                            _mutex3.lock()
+                            if not _running3: 
+                                _running3 = True
+                            _mutex3.unlock()
+                            fn_callback.emit(('GUI: reenable skip btn',None))
                             name = dono['donation']['user']['username']
                             msg = dono['donation']['message']
                             if msg.isspace(): break # Check for empty line
@@ -505,7 +519,7 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
             self.progressBarLabel.setText('Interrupting...')
             _running1 = False   # instead of mutex since inference is on QThread
         _mutex1.unlock()
-        self.TTSSkipButton.setDisabled(True)
+        self.TTSStopButton.setDisabled(True)
 
     def reload_model(self):
         TTmodel_fpath = self.get_current_TTmodel_dir()
@@ -545,7 +559,7 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
         self.TTSTextEdit.setDisabled(True)
         self.LoadTTButton.setDisabled(True)
         self.LoadWGButton.setDisabled(True)
-        self.TTSSkipButton.setEnabled(True)
+        self.TTSStopButton.setEnabled(True)
         self.tab_2.setDisabled(True)
         self.update_log_bar(0)
         self.update_log_window('Initializing','clear')
@@ -565,6 +579,7 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
                                         self.signals.progress,
                                         None,
                                         self.t_1,
+                                        self.pyt_opts['cpu limit'],
                                         parent = self)
         self.current_thread.audioSignal.connect(self.on_inferThread_complete)
         self.current_thread.timeElapsed.connect(self.on_elapsed)
@@ -705,7 +720,7 @@ class inferThread(QThread):
     interruptSignal = pyqtSignal()
 
     def __init__(self, text, use_cuda, model, waveglow,
-                progress, elapsed, timestart, parent=None):
+                progress, elapsed, timestart, num_thread, parent=None):
         super(inferThread, self).__init__(parent)
         self.text = text
         self.use_cuda = use_cuda
@@ -713,6 +728,7 @@ class inferThread(QThread):
         self.waveglow = waveglow
         self.progress = progress
         self.elapsed = elapsed
+        self.num_thread = num_thread
         self.timeoffset = time.time()-timestart
         self.timerThread = timerThread(self.timeoffset, parent = self)
         self.timerThread.timeElapsed.connect(self.timeElapsed.emit)
@@ -720,6 +736,10 @@ class inferThread(QThread):
 
     def run(self):
         self.timerThread.start(time.time())
+        if self.num_thread:
+            torch.set_num_threads(self.num_thread)
+            os.environ['OMP_NUM_THREADS'] = str(self.num_thread)
+            os.environ['MKL_NUM_THREADS'] = str(self.num_thread)
         lines = preprocess_text(self.text)
         output  = []
         for count,line in enumerate(lines):

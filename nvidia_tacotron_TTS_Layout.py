@@ -100,9 +100,9 @@ class Ui_MainWindow(object):
         self.TTSDialogButton = QtWidgets.QPushButton(self.tab)
         self.TTSDialogButton.setObjectName("TTSDialogButton")
         self.gridLayout_4.addWidget(self.TTSDialogButton, 0, 2, 1, 1, QtCore.Qt.AlignRight)
-        self.TTSSkipButton = QtWidgets.QPushButton(self.tab)
-        self.TTSSkipButton.setObjectName("TTSSkipButton")
-        self.gridLayout_4.addWidget(self.TTSSkipButton, 0, 3, 1, 1)
+        self.TTSStopButton = QtWidgets.QPushButton(self.tab)
+        self.TTSStopButton.setObjectName("TTSStopButton")
+        self.gridLayout_4.addWidget(self.TTSStopButton, 0, 3, 1, 1)
         self.verticalLayout.addLayout(self.gridLayout_4)
         self.log_window1 = QtWidgets.QLabel(self.tab)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Fixed)
@@ -266,6 +266,7 @@ class Ui_MainWindow(object):
 
         self.retranslateUi(MainWindow)
         self.tabWidget.setCurrentIndex(0)
+        self.setWindowTitle("Tacotron2 + Waveglow GUI v0.3")
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
@@ -278,7 +279,7 @@ class Ui_MainWindow(object):
         self.label_2.setText(_translate("MainWindow", "Enter Text to speech:"))
         self.progressBarLabel.setText(_translate("MainWindow", "TextLabel"))
         self.TTSDialogButton.setText(_translate("MainWindow", "Start"))
-        self.TTSSkipButton.setText(_translate("MainWindow", "Skip"))
+        self.TTSStopButton.setText(_translate("MainWindow", "Stop"))
         self.log_window1.setText(_translate("MainWindow", "Begin by loading a voice model"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab), _translate("MainWindow", "Text to Speech"))
         self.label_5.setText(_translate("MainWindow", "Channel name"))
@@ -299,4 +300,4 @@ class Ui_MainWindow(object):
         self.OptBlockNumberBtn.setText(_translate("MainWindow", "Block large numbers (>8 digits)"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_3), _translate("MainWindow", "Options"))
         self.statusbar.setText(_translate("MainWindow", "Ready"))
-        self.label_6.setText(_translate("MainWindow", "v0.2"))
+        self.label_6.setText(_translate("MainWindow", "v0.3"))
