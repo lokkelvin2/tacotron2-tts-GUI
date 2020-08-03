@@ -14,7 +14,7 @@ A machine learning based Text to Speech program with a user friendly GUI. Target
   * PyQt5 wrapper for NVIDIA/tacotron2 & /waveglow
 
 ## Download Link
-A portable executable can be found at the [Releases](https://github.com/lokkelvin2/tacotron2_GUI/releases) page, or directly [here](https://github.com/lokkelvin2/tacotron2_GUI/releases/download/v0.2/nvidia_waveglow-v0.2_x86_64.exe). Download a pretrained *Tacotron 2* and *Waveglow* model from below.
+A portable executable can be found at the [Releases](https://github.com/lokkelvin2/tacotron2-tts-GUI/releases) page, or directly [here](https://github.com/lokkelvin2/tacotron2-tts-GUI/releases/download/v0.3/nvidia_waveglow-v0.3.1_x86_64.exe). Download a pretrained *Tacotron 2* and *Waveglow* model from below.
 
 Warning: the portable executable runs on CPU which leads to a >10x speed slowdown compared to running it on GPU. 
 
