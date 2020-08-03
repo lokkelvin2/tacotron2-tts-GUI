@@ -296,7 +296,6 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
     def fns_gui_startpolling(self,arg=None):
         self.ClientStartBtn.setDisabled(True)
         self.ClientStopBtn.setEnabled(True)
-        self.ClientSkipBtn.setEnabled(True)
         self.tab.setDisabled(True)
         self.tab_3.setDisabled(True)
         self.ClientAmountLine.setDisabled(True)
