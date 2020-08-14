@@ -145,10 +145,10 @@ class GUI(QMainWindow, Ui_MainWindow, Ui_extras):
         self.reload_model_flag = True
         self.channel_id = '' # stream elements channel ID
         # Because of bug in streamelements timestamp filter, need 2 variables for previous time
-        #self.startup_time = datetime.datetime.utcnow().isoformat()
-        self.startup_time = '0' # For debugging
-        #self.prev_time = datetime.datetime.utcnow().isoformat()
-        self.prev_time = '0' # for debugging
+        self.startup_time = datetime.datetime.utcnow().isoformat()
+        #self.startup_time = '0' # For debugging
+        self.prev_time = datetime.datetime.utcnow().isoformat()
+        #self.prev_time = '0' # for debugging
         self.msg_offset = 0
         self.se_opts = {'approve only': 2, # Stream element options
                         'block large numbers': 0,
